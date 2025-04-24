@@ -24,7 +24,7 @@ class CurveIntersectionApp:
         # Главное окно
         self.create_main_window()
 
-    def filter_unique_intersections(self, intersections, precision=2):
+    def filter_unique_intersections(self, intersections, precision=4):
         """
         Функция для удаления дублирующихся точек пересечения.
 
@@ -113,8 +113,12 @@ class CurveIntersectionApp:
             tk.messagebox.showwarning("Предупреждение", "Необходимо добавить хотя бы две кривые.")
             return
 
+        # Создаем окно для графика
         graph_window = tk.Toplevel(self.root)
         graph_window.title("График кривых")
+        
+        progress_label = ttk.Label(graph_window, text="Загрузка...")
+        progress_label.pack(pady=10)
 
         try:
             icon = tk.PhotoImage(file="iconCat.png")
@@ -136,6 +140,12 @@ class CurveIntersectionApp:
 
         unique_intersections = self.filter_unique_intersections(intersections)
 
+        valid_points = []
+        for point in unique_intersections:
+            x, y = point
+            if any(abs(np.interp(x, curve["x"], curve["y"]) - y) < 1e-6 for curve in self.curves):
+                valid_points.append(point)
+
         for point in unique_intersections:
             ax.plot(point[0], point[1], 'ro')
 
@@ -148,6 +158,9 @@ class CurveIntersectionApp:
         canvas = FigureCanvasTkAgg(fig, master=graph_window)
         canvas.draw()
         canvas.get_tk_widget().pack()
+
+        # Удаление лейбла после завершения
+        progress_label.destroy()
 
         if unique_intersections:
             scroll_frame = ttk.Frame(graph_window)
@@ -170,15 +183,17 @@ class CurveIntersectionApp:
         x1, y1 = curve1["x"], curve1["y"]
         x2, y2 = curve2["x"], curve2["y"]
 
-        f1 = interp1d(x1, y1, kind='linear', fill_value="extrapolate")
-        f2 = interp1d(x2, y2, kind='linear', fill_value="extrapolate")
+        f1 = interp1d(x1, y1, kind='quadratic', fill_value="extrapolate")
+        f2 = interp1d(x2, y2, kind='quadratic', fill_value="extrapolate")
 
         intersections = []
         for x in np.linspace(min(min(x1), min(x2)), max(max(x1), max(x2)), 1000):
             try:
                 root = fsolve(lambda x: f1(x) - f2(x), x)[0]
                 if min(x1) <= root <= max(x1) and min(x2) <= root <= max(x2):
-                    intersections.append((root, f1(root)))
+                    tolerance = 1e-6  # Допустимая погрешность
+                    if abs(f1(root) - f2(root)) < tolerance:
+                        intersections.append((root, f1(root)))
             except:
                 continue
 
